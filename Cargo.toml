@@ -1,0 +1,17 @@
+[package]
+name = "pixelEngine"
+version = "0.1.0"
+edition = "2021"
+build="build.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+arrayvec = "0.7.2"
+rand = "0.8.4"
+
+
+[dependencies.sdl2]
+version = "*"
+default-features = false
+features = ["use_mac_framework","ttf"]
