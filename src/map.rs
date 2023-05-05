@@ -146,48 +146,48 @@ impl std::fmt::Display for Map {
 }
 
 
-fn draw_paths(map: &mut Map) {
-    for i in 0..(map.r_list.len() - 1) {
-        let m1 = map.r_list.get(i).middle;
-        let m2 = map.r_list.get(i + 1).middle;
+// fn draw_paths(map: &mut Map) {
+//     for i in 0..(map.r_list.len() - 1) {
+//         let m1 = map.r_list.get(i).middle;
+//         let m2 = map.r_list.get(i + 1).middle;
 
-        if m1.get(1) > m2.get(1) {
-            for h in 0..(m1.get(1) - m2.get(1)) {
-                map.c_map.get_mut(h + m2.get(1))
-            }
-        }
-    }
-}
+//         if m1.get(1) > m2.get(1) {
+//             for h in 0..(m1.get(1) - m2.get(1)) {
+//                 map.c_map.get_mut(h + m2.get(1))
+//             }
+//         }
+//     }
+// }
 
 
-for i in range(len(room_list) - 1):
-        m1 = room_list[i].middle()
-        m2 = room_list[i + 1].middle()
+// for i in range(len(room_list) - 1):
+//         m1 = room_list[i].middle()
+//         m2 = room_list[i + 1].middle()
 
-        #Draw vertical component
-        if m1[1] > m2[1]:
-            for h in range(m1[1] - m2[1]):
-                map[h + m2[1]][m1[0]].change_material(PATH_MATERIAL)
-            height = m2[1]
-        elif m1[1] < m2[1]:
-            for h in range(m2[1] - m1[1]):
-                map[h + m1[1]][m2[0]].change_material(PATH_MATERIAL)
-            height = m1[1]
-        else:
-            height = m1[1]
+//         #Draw vertical component
+//         if m1[1] > m2[1]:
+//             for h in range(m1[1] - m2[1]):
+//                 map[h + m2[1]][m1[0]].change_material(PATH_MATERIAL)
+//             height = m2[1]
+//         elif m1[1] < m2[1]:
+//             for h in range(m2[1] - m1[1]):
+//                 map[h + m1[1]][m2[0]].change_material(PATH_MATERIAL)
+//             height = m1[1]
+//         else:
+//             height = m1[1]
         
-        #Determine direction towards destination
-        if m2[0] - m1[0] > 0:
-            start = m1[0]
-            destination = m2[0]
-        else:
-            start = m2[0]
-            destination = m1[0]
+//         #Determine direction towards destination
+//         if m2[0] - m1[0] > 0:
+//             start = m1[0]
+//             destination = m2[0]
+//         else:
+//             start = m2[0]
+//             destination = m1[0]
 
-        #Draw horizontal componenet
-        while start != destination:
-            map[height][start].change_material(PATH_MATERIAL)
-            start += 1
+//         #Draw horizontal componenet
+//         while start != destination:
+//             map[height][start].change_material(PATH_MATERIAL)
+//             start += 1
 
 
 pub fn new_map() -> Map {
