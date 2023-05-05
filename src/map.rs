@@ -20,7 +20,6 @@ struct Cord {
 struct Room {
     x: i32,
     y: i32,
-    material: String,
     width: u32,
     height: u32,
     middle: Vec<i32>
@@ -69,7 +68,7 @@ impl Map {
         }
     }
 
-    pub fn regenerate(&mut self) {
+    fn regenerate(&mut self) {
         // Clear old data
         self.r_list.clear();
         for r in 0..self.height {
@@ -116,15 +115,64 @@ impl Map {
                     y, 
                     width: room_width as u32, 
                     height: room_height as u32,
-                    middle: vec![x + room_width / 2, y + room_height / 2],
-                    material: String::from(&self.textures.room)
+                    middle: vec![x + room_width / 2, y + room_height / 2]
                 };
 
                 new_room.push_to_map(&mut self.c_map, self.width as i32, String::from(&self.textures.room));
                 self.r_list.push(new_room);
                 room_count -= 1;
             }
-        }  
+        }
+    }
+
+    fn draw_paths(&mut self) {
+        for i in 0..(&self.r_list.len() - 1) {
+            let m1 = &self.r_list.get(i).expect("room retrieve error").middle;
+            let m2 = &self.r_list.get(i + 1).expect("room retrieve error").middle;
+            let m1_x = m1.get(0).expect("m1_x");
+            let m1_y = m1.get(1).expect("m1_y");
+            let m2_x = m2.get(0).expect("m2_x");
+            let m2_y = m2.get(1).expect("m2_y");
+
+            // Center of room Cordinates
+            print!("{m1_x}, {m1_y} : {m2_x}, {m2_y}\n");
+    
+            let height: i32;
+            let mut start: i32;
+            let destination: i32;
+    
+            // Draw vertical component
+            if m1_y > m2_y {
+                for h in 0..(m1_y - m2_y) {
+                    self.c_map.get_mut(((h + m2_y) * self.width as i32 + m1_x) as usize).expect("path1").material = String::from(&self.textures.path);
+                }
+                height = i32::clone(m2_y);
+            }
+            else if m1_y < m2_y {
+                for h in 0..(m2_y - m1_y) {
+                    self.c_map.get_mut(((h + m1_y) * self.width as i32 + m2_x) as usize).expect("path2").material = String::from(&self.textures.path);
+                }
+                height = i32::clone(m1_y);
+            }
+            else {
+                height = i32::clone(m1_y);
+            }
+    
+            // Find start and destination based on direction (start is always < destination)
+            if m2_x - m1_x > 0 {
+                start = i32::clone(m1_x);
+                destination = i32::clone(m2_x);
+            } else {
+                start = i32::clone(m2_x);
+                destination = i32::clone(m1_x);
+            }
+    
+            // Draw horizontal component
+            while start != destination {
+                self.c_map.get_mut((height * self.width as i32 + start) as usize).expect("path2").material = String::from(&self.textures.path);
+                start += 1;
+            }
+        }
     }
 }
 
@@ -146,50 +194,6 @@ impl std::fmt::Display for Map {
 }
 
 
-// fn draw_paths(map: &mut Map) {
-//     for i in 0..(map.r_list.len() - 1) {
-//         let m1 = map.r_list.get(i).middle;
-//         let m2 = map.r_list.get(i + 1).middle;
-
-//         if m1.get(1) > m2.get(1) {
-//             for h in 0..(m1.get(1) - m2.get(1)) {
-//                 map.c_map.get_mut(h + m2.get(1))
-//             }
-//         }
-//     }
-// }
-
-
-// for i in range(len(room_list) - 1):
-//         m1 = room_list[i].middle()
-//         m2 = room_list[i + 1].middle()
-
-//         #Draw vertical component
-//         if m1[1] > m2[1]:
-//             for h in range(m1[1] - m2[1]):
-//                 map[h + m2[1]][m1[0]].change_material(PATH_MATERIAL)
-//             height = m2[1]
-//         elif m1[1] < m2[1]:
-//             for h in range(m2[1] - m1[1]):
-//                 map[h + m1[1]][m2[0]].change_material(PATH_MATERIAL)
-//             height = m1[1]
-//         else:
-//             height = m1[1]
-        
-//         #Determine direction towards destination
-//         if m2[0] - m1[0] > 0:
-//             start = m1[0]
-//             destination = m2[0]
-//         else:
-//             start = m2[0]
-//             destination = m1[0]
-
-//         #Draw horizontal componenet
-//         while start != destination:
-//             map[height][start].change_material(PATH_MATERIAL)
-//             start += 1
-
-
 pub fn new_map() -> Map {
     let t = TexturePack {
         empty: String::from("."),
@@ -207,15 +211,17 @@ pub fn new_map() -> Map {
         textures: t,
         r_list: Vec::<Room>::new(),
         c_map: ArrayVec::<Cord, 1600>::new(),
-        max_room_size: 5,
+        max_room_size: 8,
         min_room_size: 4,
-        max_rooms: 4,
-        min_rooms: 3
+        max_rooms: 10,
+        min_rooms: 5
     };
 
     map.init_empty_map();
-    map.regenerate();
-
     map
+}
 
+pub fn generate(map: &mut Map) {
+    map.regenerate();
+    map.draw_paths();
 }

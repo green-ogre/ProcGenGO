@@ -1,4 +1,3 @@
-use std::env;
 use std::path::Path;
 
 use sdl2::event::Event;
@@ -83,7 +82,7 @@ fn run(font_path: &Path, mut map: map::Map) -> Result<(), String> {
     let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
 
     let window = video_subsys
-        .window("SDL2_TTF Example", SCREEN_WIDTH, SCREEN_HEIGHT)
+        .window("ProcGenGO", SCREEN_WIDTH, SCREEN_HEIGHT)
         .position_centered()
         .opengl()
         .build()
@@ -105,7 +104,7 @@ fn run(font_path: &Path, mut map: map::Map) -> Result<(), String> {
                 Event::KeyDown { keycode: Some(keycode), .. } => {
                     match keycode {
                         Keycode::R => {
-                            map.regenerate();
+                            map::generate(&mut map);
                             render_map(&mut canvas, &font, &texture_creator, &map)?;
                         },
                         Keycode::Escape => break 'mainloop,
@@ -124,7 +123,8 @@ fn main() -> Result<(), String> {
     
     println!("linked sdl2_ttf: {}", sdl2::ttf::get_linked_version());
 
-    let map = map::new_map();
+    let mut map = map::new_map();
+    map::generate(&mut map);
 
     let path: &Path = Path::new("fonts/joystix monospace.ttf");
     run(path, map)?;
