@@ -1,4 +1,5 @@
 use std::path::Path;
+use rand::Rng;
 
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -11,7 +12,9 @@ use sdl2::video::{Window, WindowContext};
 static SCREEN_WIDTH: u32 = 1000;
 static SCREEN_HEIGHT: u32 = 800;
 
-mod map;
+pub mod map;
+use map::Map;
+
 
 // handle the annoying Rect i32
 macro_rules! rect(
@@ -45,7 +48,7 @@ fn get_centered_rect(rect_width: u32, rect_height: u32, cons_width: u32, cons_he
 }
 
 
-fn render_map(canvas: &mut Canvas<Window>, font: &Font, texture_creator: &TextureCreator<WindowContext>, map: &map::Map)  -> Result<(), String> {
+fn render_map(canvas: &mut Canvas<Window>, font: &Font, texture_creator: &TextureCreator<WindowContext>, map: &Map)  -> Result<(), String> {
     // render a surface, and convert it to a texture bound to the canvas
     let surface = font
         .render(&format!("{map}"))
@@ -76,7 +79,7 @@ fn render_map(canvas: &mut Canvas<Window>, font: &Font, texture_creator: &Textur
 }
 
 
-fn run(font_path: &Path, mut map: map::Map) -> Result<(), String> {
+fn run(font_path: &Path, map: &mut Map, textures: map::TexturePack) -> Result<(), String> {
     let sdl_context = sdl2::init()?;
     let video_subsys = sdl_context.video()?;
     let ttf_context = sdl2::ttf::init().map_err(|e| e.to_string())?;
@@ -104,7 +107,7 @@ fn run(font_path: &Path, mut map: map::Map) -> Result<(), String> {
                 Event::KeyDown { keycode: Some(keycode), .. } => {
                     match keycode {
                         Keycode::R => {
-                            map::generate(&mut map);
+                            heuristic(map, &textures);
                             render_map(&mut canvas, &font, &texture_creator, &map)?;
                         },
                         Keycode::Escape => break 'mainloop,
@@ -119,15 +122,132 @@ fn run(font_path: &Path, mut map: map::Map) -> Result<(), String> {
     Ok(())
 }
 
+
+/////////// --------------------------------------------------------------------------
+/// 
+///                           Heuristic
+/// 
+/////////// --------------------------------------------------------------------------
+
+
+pub fn heuristic(map: &mut Map, textures: &map::TexturePack) {
+    // Clear old data
+    map.clear(&textures.empty);
+
+    let mut rng = rand::thread_rng();
+    let mut room_count = rng.gen_range(map.min_rooms..map.max_rooms);
+
+    while room_count > 0 {
+        // Size
+        let room_width = rng.gen_range(map.min_room_size..map.max_room_size);
+        let room_height = rng.gen_range(map.min_room_size..map.max_room_size);
+
+        // Random top left origin
+        let mut x = rng.gen_range(1..map.width as i32 - 1);
+        let mut y = rng.gen_range(1..map.height as i32 - 1);
+
+        // Verify map bounds
+        while x + room_width + 1 > map.width as i32 || y + room_height + 1 > map.height as i32 {
+            x = rng.gen_range(1..map.width as i32 - 1);
+            y = rng.gen_range(1..map.height as i32 - 1);
+        }
+
+        // Verify no overlap
+        let mut valid = true;
+        for y in (y - 1)..(y + room_height + 1) {
+            for x in (x - 1)..(x + room_width + 1) {
+                if map.get_mut_cord(x as usize, y as usize).material.eq(&textures.room) {
+                    valid = false;
+                    break;
+                }
+            }
+        }
+
+        // Add room into map if valid
+        if valid {
+            let new_room = map::Room {
+                x, 
+                y, 
+                width: room_width, 
+                height: room_height,
+                middle: vec![x + room_width / 2, y + room_height / 2]
+            };
+
+            new_room.push_to_map(map, &textures.room);
+            map.push_room(new_room);
+            room_count -= 1;
+        }
+    }
+    draw_paths(map, textures);
+}
+
+fn draw_paths(map: &mut Map, textures: &map::TexturePack) {
+    for i in 0..(map.num_rooms() - 1) {
+        let m1 = &map.get_room(i).middle;
+        let m2 = &map.get_room(i + 1).middle;
+        let m1_x = i32::clone(m1.get(0).expect("m1_x"));
+        let m1_y = i32::clone(m1.get(1).expect("m1_y"));
+        let m2_x = i32::clone(m2.get(0).expect("m2_x"));
+        let m2_y = i32::clone(m2.get(1).expect("m2_y"));
+
+        // Center of room Cordinates
+        print!("{m1_x}, {m1_y} : {m2_x}, {m2_y}\n");
+
+        let height: i32;
+        let mut start: i32;
+        let destination: i32;
+
+        // Draw vertical component
+        if m1_y > m2_y {
+            for h in 0..(m1_y - m2_y) {
+                map.get_mut_cord(m1_x as usize, (h + m2_y) as usize).set_material(&textures.path);
+            }
+            height = m2_y
+        }
+        else if m1_y < m2_y {
+            for h in 0..(m2_y - m1_y) {
+                map.get_mut_cord(m2_x as usize, (h + m1_y) as usize).set_material(&textures.path);
+            }
+            height = m1_y;
+        }
+        else {
+            height = m1_y;
+        }
+
+        // Find start and destination based on direction (start is always < destination)
+        if m2_x - m1_x > 0 {
+            start = m1_x;
+            destination = m2_x;
+        } else {
+            start = m2_x;
+            destination = m1_x;
+        }
+
+        // Draw horizontal component
+        while start != destination {
+            map.get_mut_cord(start as usize, height as usize).set_material(&textures.path);
+            start += 1;
+        }
+    }
+}
+
+
 fn main() -> Result<(), String> {
     
     println!("linked sdl2_ttf: {}", sdl2::ttf::get_linked_version());
 
     let mut map = map::new_map();
-    map::generate(&mut map);
+
+    let textures = map::TexturePack {
+        empty: String::from("."),
+        room: String::from("X"),
+        path: String::from("X")
+    };
+
+    heuristic(&mut map, &textures);
 
     let path: &Path = Path::new("fonts/joystix monospace.ttf");
-    run(path, map)?;
+    run(path, &mut map, textures)?;
 
     Ok(())
 }
