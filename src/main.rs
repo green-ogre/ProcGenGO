@@ -15,8 +15,15 @@ use tui::{
     Frame, Terminal,
 };
 
+enum State {
+    Continuous,
+    Manual
+}
+
 /// App holds the state of the application
 struct App<'a> {
+    // Input state
+    state: State,
     // Generation time in milliseconds
     gen_time: Duration,
     // History of recorded messages
@@ -34,6 +41,7 @@ struct App<'a> {
 impl<'a> Default for App<'a> {
     fn default() -> Self {
         App {
+            state: State::Manual,
             gen_time: Duration::default(),
             map_rows: Vec::<String>::new(),
             map: proc_gen::map::Map::default(),
@@ -78,39 +86,67 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
     loop {
         terminal.draw(|f| ui(f, &mut app))?;
 
-        if let Event::Key(key) = event::read()? {
-            match key.code {
-                    KeyCode::Char('r') => {
-                        // generate new map and measure time
-                        let start = Instant::now();
-                        proc_gen::heuristic(&mut app.map, &app.textures);
-                        let duration = start.elapsed();
-                        app.gen_time = duration;
-
-                        // update time data
-                        match app.time_data.len().cmp(&115) {
-                            Ordering::Greater => {
-                                app.time_data.remove(0);
-                                app.time_data.push(duration.as_micros() as u64);
-                            },
-                            _ => { app.time_data.push(duration.as_micros() as u64); }
+        match app.state {
+            State::Continuous => {
+                update(&mut app);
+                if let Event::Key(key) = event::read()? {
+                    match key.code {
+                        KeyCode::Char('q') => {
+                            return Ok(());
                         }
-
-                        // update num room data
-                        match app.room_data.len().cmp(&15) {
-                            Ordering::Greater => {
-                                app.room_data.remove(0);
-                                app.room_data.push(("", app.map.num_rooms() as u64));
-                            },
-                            _ => { app.room_data.push(("", app.map.num_rooms() as u64)); }
+                        KeyCode::Char('g') => {
+                            app.state = State::Manual;
+                            std::thread::sleep(std::time::Duration::from_millis(500));
                         }
+                        _ => {}
                     }
-                    KeyCode::Char('q') => {
-                        return Ok(());
+                }
+                std::thread::sleep(std::time::Duration::from_millis(250));
+            },
+            State::Manual => {
+                if let Event::Key(key) = event::read()? {
+                    match key.code {
+                            KeyCode::Char('r') => {
+                                update(&mut app);
+                            }
+                            KeyCode::Char('q') => {
+                                return Ok(());
+                            }
+                            KeyCode::Char('g') => {
+                                app.state = State::Continuous;
+                                std::thread::sleep(std::time::Duration::from_millis(500));
+                            }
+                            _ => {}
                     }
-                    _ => {}
+                }
             }
         }
+    }
+}
+
+fn update(app: &mut App) {
+    // generate new map and measure time
+    let start = Instant::now();
+    proc_gen::heuristic(&mut app.map, &app.textures);
+    let duration = start.elapsed();
+    app.gen_time = duration;
+
+    // update time data
+    match app.time_data.len().cmp(&115) {
+        Ordering::Greater => {
+            app.time_data.remove(0);
+            app.time_data.push(duration.as_micros() as u64);
+        },
+        _ => { app.time_data.push(duration.as_micros() as u64); }
+    }
+
+    // update num room data
+    match app.room_data.len().cmp(&15) {
+        Ordering::Greater => {
+            app.room_data.remove(0);
+            app.room_data.push(("", app.map.num_rooms() as u64));
+        },
+        _ => { app.room_data.push(("", app.map.num_rooms() as u64)); }
     }
 }
 
@@ -137,15 +173,28 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .split(data_map_chunks[0]);
 
     // create help message
-    let (msg, style) = (vec![
-                Span::raw("Press "),
-                Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(" to exit, "),
-                Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(" to generate a new map."),
-                ],
+    let (msg, style) = match app.state {
+        State::Manual => (vec![
+            Span::raw("Press "),
+            Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(" to exit, "),
+            Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(" to generate a new map, "),
+            Span::styled("g", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(" to continuously generate.")
+            ],
             Style::default().add_modifier(Modifier::RAPID_BLINK)
-        );
+        ),
+        State::Continuous => (vec![
+            Span::raw("Press "),
+            Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(" to exit, "),
+            Span::styled("g", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(" to stop continuously generating.")
+            ],
+            Style::default().add_modifier(Modifier::RAPID_BLINK)
+        ),
+    };
 
     // render help message
     let mut text = Text::from(Spans::from(msg));
