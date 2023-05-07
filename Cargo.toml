@@ -1,0 +1,11 @@
+[package]
+name = "procgengo"
+version = "0.1.0"
+edition = "2021"
+authors = ["Alice <a@example.com>", "Bob <b@example.com>"]
+
+[dependencies]
+arrayvec = "0.7.2"
+tui = "0.19"
+crossterm = "0.26.1"
+rand = "0.8.5"
