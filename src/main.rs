@@ -1,4 +1,10 @@
-pub mod proc_gen;
+/////////// ------------------------------------------------------///////////
+///                                                                       ///
+///                                Main                                   ///
+///                                                                       ///
+/////////// ------------------------------------------------------///////////
+
+pub mod heuristic;
 
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
@@ -29,9 +35,9 @@ struct App<'a> {
     // History of recorded messages
     map_rows: Vec<String>,
     // Map instance
-    map: proc_gen::map::Map,
+    map: heuristic::map::Map,
     // ASCII rendered on Map
-    textures: proc_gen::map::TexturePack,
+    textures: heuristic::map::TexturePack,
     // Number of rooms
     room_data: Vec<(&'a str, u64)>,
     // Time data
@@ -44,8 +50,8 @@ impl<'a> Default for App<'a> {
             state: State::Manual,
             gen_time: Duration::default(),
             map_rows: Vec::<String>::new(),
-            map: proc_gen::map::Map::default(),
-            textures: proc_gen::map::TexturePack::default(),
+            map: heuristic::map::Map::default(),
+            textures: heuristic::map::TexturePack::default(),
             room_data: Vec::<(&'a str, u64)>::new(),
             time_data: Vec::<u64>::new()
         }
@@ -61,7 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut app = App::default();
-    proc_gen::heuristic(&mut app.map, &app.textures);
+    heuristic::heuristic(&mut app.map, &app.textures);
 
     // create app and run it
     let res = run_app(&mut terminal, app);
@@ -127,7 +133,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
 fn update(app: &mut App) {
     // generate new map and measure time
     let start = Instant::now();
-    proc_gen::heuristic(&mut app.map, &app.textures);
+    heuristic::heuristic(&mut app.map, &app.textures);
     let duration = start.elapsed();
     app.gen_time = duration;
 
