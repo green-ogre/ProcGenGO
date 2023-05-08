@@ -78,7 +78,7 @@ pub mod map {
                 min_rooms: 8
             };
         
-            init_empty_map(&mut map, &'░');
+            init_empty_map(&mut map, &' ');
             map
         }
     
@@ -112,23 +112,6 @@ pub mod map {
                 for x in 0..self.width {
                     self.get_mut_cord(x, y).set_material(material);
                 }
-            }
-        }
-    
-        pub fn update_map_rows(&self, map_rows: &mut Vec::<String>) {
-            map_rows.clear();
-            for y in 0..self.height {
-                let mut row = String::new();
-                // fix alignment with rows 0-9
-                if y < 10 {
-                    row.push(' ');
-                }
-    
-                for x in 0..self.width {
-                    row.push(self.get_cord(x, y).material);
-                    row.push(' ');
-                }
-                map_rows.push(row);
             }
         }
     

@@ -11,7 +11,8 @@ pub mod map {
     pub struct Map {
         pub height: usize,
         pub width: usize,
-        pub render: ArrayVec<bool, 1600>
+        pub render: ArrayVec<bool, 1600>,
+        pub iterations: i32
     }
 
     impl Map {
@@ -19,48 +20,16 @@ pub mod map {
             let mut map = Map {
                 height: 40,
                 width: 40,
-                render: ArrayVec::<bool, 1600>::new()
+                render: ArrayVec::<bool, 1600>::new(),
+                iterations: 0
             };
         
             fill(&mut map);
             map
         }
-    
-        pub fn update_map_rows(&self, map_rows: &mut Vec::<String>) {
-            map_rows.clear();
-            for y in 0..self.height {
-                let mut row = String::new();
-                // fix alignment with rows 0-9
-                if y < 10 {
-                    row.push(' ');
-                }
-    
-                for x in 0..self.width {
-                    row.push(match self.get_pos(x, y) {
-                        true => 'X',
-                        false => '.'
-                    });
-                    row.push(' ');
-                }
-                map_rows.push(row);
-            }
-        }
 
         pub fn get_pos(&self, x: usize, y: usize) -> &bool {
             self.render.get(self.width * y + x).expect("Could not find position")
-        }
-    }
-    
-    impl Default for Map {
-        fn default() -> Self {
-            let mut map = Map {
-                height: 40,
-                width: 40,
-                render: ArrayVec::<bool, 1600>::new()
-            };
-        
-            scramble(&mut map);
-            map
         }
     }
     
@@ -83,6 +52,7 @@ pub mod map {
     }
     
     pub fn fill(map: &mut Map) {
+        map.iterations = 0;
         map.render.clear();
 
         for _r in 0..map.height {
@@ -94,87 +64,86 @@ pub mod map {
 }
 
 
-use arrayvec::ArrayVec;
+use rand::Rng;
 
 
 pub fn iterate(map: &mut map::Map) {
-    let mut new_render = ArrayVec::<bool, 1600>::new();
-    for y in 0..map.height {
-        for x in 0..map.width {
-            let num_neighbors = count_neighbors(&map, x, y);
+    let mut rng = rand::thread_rng();
+    const START_RADIUS: usize = 10;
+    const MAX_STEPS: i32 = 50;
+    let mut x: usize;
+    let mut y: usize;
 
-            if num_neighbors == -1 {
-                new_render.push(map.get_pos(x, y).clone());
-            }
-
-            if num_neighbors == 0 || num_neighbors >= 5 {
-                new_render.push(true);
-            }
-            else if 1 <= num_neighbors && num_neighbors <= 4 {
-                new_render.push(false);
+    match map.iterations {
+        0 => {
+            x = rng.gen_range(START_RADIUS..(map.width - START_RADIUS));
+            y = rng.gen_range(START_RADIUS..(map.width - START_RADIUS));
+        },
+        _ => {
+            loop {
+                x = rng.gen_range(START_RADIUS..(map.width - START_RADIUS));
+                y = rng.gen_range(START_RADIUS..(map.height - START_RADIUS));
+                if map.render.get(y * map.width + x).expect("found point") == &false {
+                    break;
+                }
             }
         }
     }
-    map.render = new_render;
+
+    // continue for MAX_STEPS or exiting bounds
+    for _ in 0..MAX_STEPS {
+
+        // check bounds
+        if x == 0 || y == 0 || x == map.width - 1 || y == map.height - 1 {
+            break;
+        }
+
+        // choose a direction and take a step
+        match rng.gen_range(0..4) {
+            // Up
+            0 => {
+                y -= 1;
+            },
+            // Down
+            1 => {
+                y += 1;
+            },
+            // Left
+            2 => {
+                x -= 1;
+            },
+            // Right
+            3 => {
+                x += 1;
+            }
+            _ => { print!("Something has gone wrong!");} 
+        }
+
+        // remove wall
+        if let Some(elem) = map.render.get_mut(y * map.width + x) {
+            *elem = false;
+        } 
+    }
+    map.iterations += 1;
 }
 
-fn count_neighbors(map: &map::Map, x: usize, y: usize) -> i32 {
-    if x == 0 || y == 0 || x == map.width || y == map.height {
-        return -1;
+fn num_walls(map: &map::Map) -> i32 {
+    let mut num_walls = 0;
+    for i in 0..1600 {
+        if let Some(elem) = map.render.get(i) {
+            if elem.eq(&true) {
+                num_walls += 1;
+            }
+        } 
     }
-
-    let mut num_neighbors = 0;
-
-    // X . .
-    // . . .
-    // . . .
-    num_neighbors += has_neighbor(&map, x - 1, y - 1);
-
-    // . . .
-    // X . .
-    // . . .
-    num_neighbors += has_neighbor(&map, x - 1, y);
-
-    // . . .
-    // . . .
-    // X . .
-    num_neighbors += has_neighbor(&map, x - 1, y + 1);
-
-    // . . .
-    // . . X
-    // . . .
-    num_neighbors += has_neighbor(&map, x + 1, y);
-
-    // . . .
-    // . . .
-    // . X .
-    num_neighbors += has_neighbor(&map, x, y + 1);
-
-    // . X .
-    // . . .
-    // . . .
-    num_neighbors += has_neighbor(&map, x, y - 1);
-
-    // . . X
-    // . . .
-    // . . .
-    num_neighbors += has_neighbor(&map, x + 1, y - 1);
-
-    // . . .
-    // . . .
-    // . . X
-    num_neighbors += has_neighbor(&map, x + 1, y + 1);
-
-    num_neighbors
+    num_walls
 }
 
-fn has_neighbor(map: &map::Map, x: usize, y: usize) -> i32 {
-    let result = map.render.get(map.width * y + x);
-    match result {
-        Some(r) => match r {
-            true => 1,
-            false => 0
-        },
-        None => 0
-    }
+pub fn update_data_list(map: &map::Map, data: &mut Vec<(&str, String)>) {
+    data.clear();
+    data.push(("Iterations", format!("{}", map.iterations)));
+    let num_walls = num_walls(&map);
+    data.push(("Total Number of Walls", format!("{}", num_walls)));
+    data.push(("Total Empty Space", format!("{}", 1600 - num_walls)));
+    data.push(("% Occupied", format!("{}", num_walls as f32 / 1600 as f32)));
 }

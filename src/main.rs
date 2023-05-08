@@ -6,6 +6,7 @@
 
 pub mod heuristic;
 pub mod cellular_automata;
+pub mod drunkard;
 
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
@@ -25,11 +26,9 @@ use tui::{
 
 enum Algorithm {
     Heuristic,
-    Cellular
+    Cellular,
+    Drunkard,
 }
-
-// Structures that hold specific information related to their algorithm
-
 struct Heuristic {
     // Map instance
     map: heuristic::map::Map,
@@ -58,19 +57,31 @@ impl Cellular {
     }
 }
 
+struct Drunkard {
+    map: drunkard::map::Map
+}
 
-// Contains all algorithm data
+impl Drunkard {
+    fn new() -> Self {
+        Drunkard { 
+            map: drunkard::map::Map::new()
+        }
+    }
+}
+
 
 struct AlgorithmData {
     heuristic: Heuristic,
-    cellular: Cellular
+    cellular: Cellular,
+    drunkard: Drunkard,
 }
 
 impl AlgorithmData {
     fn new() -> Self {
         AlgorithmData { 
             heuristic: Heuristic::new(), 
-            cellular: Cellular::new()
+            cellular: Cellular::new(),
+            drunkard: Drunkard::new(),
         }
     }
 }
@@ -99,7 +110,7 @@ impl<'a> Default for App<'a> {
             time_sparkline: Vec::<u64>::new(),
             algorithm: Algorithm::Heuristic,
             algorithm_data: AlgorithmData::new(),
-            tab_titles: vec!["Heuristic", "Cellular"],
+            tab_titles: vec!["Heuristic", "Cellular", "Drunkard"],
             tab_index: 0,
             data_list: Vec::<(&str, String)>::new(),
         }
@@ -111,7 +122,8 @@ impl<'a> App<'a> {
         match self.tab_index {
             0 => self.algorithm = Algorithm::Heuristic,
             1 => self.algorithm = Algorithm::Cellular,
-            _ => self.algorithm = Algorithm::Heuristic
+            2 => self.algorithm = Algorithm::Drunkard,
+            _ => self.algorithm = Algorithm::Heuristic,
         }
     }
 
@@ -119,6 +131,7 @@ impl<'a> App<'a> {
         match self.tab_index {
             0 => heuristic::update_data_list(&self.algorithm_data.heuristic.map, &mut self.data_list),
             1 => cellular_automata::update_data_list(&self.algorithm_data.cellular.map, &mut self.data_list),
+            2 => drunkard::update_data_list(&self.algorithm_data.drunkard.map, &mut self.data_list),
             _ => {}
         }
     }
@@ -166,6 +179,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                 KeyCode::Char('s') => {
                     match app.algorithm {
                         Algorithm::Cellular => cellular_automata::map::scramble(&mut app.algorithm_data.cellular.map),
+                        Algorithm::Drunkard => drunkard::map::fill(&mut app.algorithm_data.drunkard.map),
                         _ => {}
                     }
                 },
@@ -181,6 +195,11 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
 
                 KeyCode::Char('2') => {
                     app.tab_index = 1;
+                    app.update_current_algo();
+                },
+
+                KeyCode::Char('3') => {
+                    app.tab_index = 2;
                     app.update_current_algo();
                 },
 
@@ -211,7 +230,7 @@ fn update(app: &mut App) {
             }
 
             // update num room data
-            match app.time_barchart.len().cmp(&15) {
+            match app.time_barchart.len().cmp(&4) {
                 Ordering::Greater => {
                     app.time_barchart.remove(0);
                     app.time_barchart.push(("HU", duration.as_micros() as u64));
@@ -225,6 +244,34 @@ fn update(app: &mut App) {
             let start = Instant::now();
 
             cellular_automata::iterate(&mut app.algorithm_data.cellular.map);
+
+            let duration = start.elapsed();
+            app.gen_time = duration;
+
+            // update time data
+            match app.time_sparkline.len().cmp(&115) {
+                Ordering::Greater => {
+                    app.time_sparkline.remove(0);
+                    app.time_sparkline.push(duration.as_micros() as u64);
+                },
+                _ => { app.time_sparkline.push(duration.as_micros() as u64); }
+            }
+
+            // update num room data
+            match app.time_barchart.len().cmp(&4) {
+                Ordering::Greater => {
+                    app.time_barchart.remove(0);
+                    app.time_barchart.push(("CA", duration.as_micros() as u64));
+                },
+                _ => { app.time_barchart.push(("CA", duration.as_micros() as u64)); }
+            }
+        }
+
+        Algorithm::Drunkard => {
+            // generate new map and measure time
+            let start = Instant::now();
+
+            drunkard::iterate(&mut app.algorithm_data.drunkard.map);
 
             let duration = start.elapsed();
             app.gen_time = duration;
@@ -307,6 +354,17 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             Span::raw(" to exit, "),
             Span::styled("s", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(" to scramble, "),
+            Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(" to iterate."),
+            ],
+            Style::default()
+        ),
+        Algorithm::Drunkard => (vec![
+            Span::raw("Press "),
+            Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(" to exit, "),
+            Span::styled("s", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(" to reset, "),
             Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(" to iterate."),
             ],
@@ -396,6 +454,9 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             1 => {
                 text = Text::from(format!("{}", app.algorithm_data.cellular.map));
             },
+            2 => {
+                text = Text::from(format!("{}", app.algorithm_data.drunkard.map));
+            },
             _ => unreachable!(),
         };
         text.patch_style(style);
@@ -408,29 +469,6 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
                     .title("Map")
                     .border_type(BorderType::Rounded)
             )
-    };
-    
-    
-    match app.tab_index {
-        0 => {
-            let mut text = Text::from(format!("{}", app.algorithm_data.heuristic.map));
-            text.patch_style(style);
-            Paragraph::new(text)
-                .alignment(tui::layout::Alignment::Center)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .style(Style::default().fg(Color::Yellow))
-                        .title("Map")
-                        .border_type(BorderType::Rounded)
-                )
-        },
-        1 => {
-            let mut text = Text::from(format!("{}", app.algorithm_data.cellular.map));
-            text.patch_style(style);
-            Paragraph::new(text)
-        },
-        _ => unreachable!(),
     };
     f.render_widget(inner, right_chunks[1]);
 }
