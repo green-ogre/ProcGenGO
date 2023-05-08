@@ -1,6 +1,6 @@
 /////////// ------------------------------------------------------///////////
 ///                                                                       ///
-///                        Cellular Automata                              ///
+///                             Drunkard!                                 ///
 ///                                                                       ///
 /////////// ------------------------------------------------------///////////
 
@@ -11,8 +11,7 @@ pub mod map {
     pub struct Map {
         pub height: usize,
         pub width: usize,
-        pub render: ArrayVec<bool, 1600>,
-        pub iterations: i32
+        pub render: ArrayVec<bool, 1600>
     }
 
     impl Map {
@@ -20,11 +19,10 @@ pub mod map {
             let mut map = Map {
                 height: 40,
                 width: 40,
-                render: ArrayVec::<bool, 1600>::new(),
-                iterations: 0
+                render: ArrayVec::<bool, 1600>::new()
             };
         
-            scramble(&mut map);
+            fill(&mut map);
             map
         }
     
@@ -53,6 +51,19 @@ pub mod map {
         }
     }
     
+    impl Default for Map {
+        fn default() -> Self {
+            let mut map = Map {
+                height: 40,
+                width: 40,
+                render: ArrayVec::<bool, 1600>::new()
+            };
+        
+            scramble(&mut map);
+            map
+        }
+    }
+    
     impl std::fmt::Display for Map {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             for y in 0..self.height {
@@ -71,13 +82,12 @@ pub mod map {
         }
     }
     
-    pub fn scramble(map: &mut Map) {
+    pub fn fill(map: &mut Map) {
         map.render.clear();
-        map.iterations = 0;
 
         for _r in 0..map.height {
             for _c in 0..map.width {
-                map.render.push(fastrand::i32(0..2) == 0);
+                map.render.push(true);
             }
         }
     }
@@ -106,11 +116,10 @@ pub fn iterate(map: &mut map::Map) {
         }
     }
     map.render = new_render;
-    map.iterations += 1;
 }
 
 fn count_neighbors(map: &map::Map, x: usize, y: usize) -> i32 {
-    if x == 0 || y == 0 || x == map.width - 1 || y == map.height - 1 {
+    if x == 0 || y == 0 || x == map.width || y == map.height {
         return -1;
     }
 
@@ -168,25 +177,4 @@ fn has_neighbor(map: &map::Map, x: usize, y: usize) -> i32 {
         },
         None => 0
     }
-}
-
-fn num_walls(map: &map::Map) -> i32 {
-    let mut num_walls = 0;
-    for i in 0..1600 {
-        if let Some(elem) = map.render.get(i) {
-            if elem.eq(&true) {
-                num_walls += 1;
-            }
-        } 
-    }
-    num_walls
-}
-
-pub fn update_data_list(map: &map::Map, data: &mut Vec<(&str, String)>) {
-    data.clear();
-    data.push(("Iterations", format!("{}", map.iterations)));
-    let num_walls = num_walls(&map);
-    data.push(("Total Number of Walls", format!("{}", num_walls)));
-    data.push(("Total Empty Space", format!("{}", 1600 - num_walls)));
-    data.push(("% Occupied", format!("{}", num_walls as f32 / 1600 as f32)));
 }
