@@ -38,12 +38,12 @@ pub mod map {
         pub path: char
     }
     
-    impl Default for TexturePack {
-        fn default() -> Self {
+    impl TexturePack {
+        pub fn new() -> Self {
             TexturePack {
-                empty: '.',
-                room: 'X',
-                path: 'X'
+                empty: ' ',
+                room: '■',
+                path: '■'
             }
         }
     }
@@ -72,13 +72,13 @@ pub mod map {
                 width: 40,
                 r_list: Vec::<Room>::new(),
                 c_map: ArrayVec::<Cord, 1600>::new(),
-                max_room_size: 8,
+                max_room_size: 12,
                 min_room_size: 4,
-                max_rooms: 10,
-                min_rooms: 5
+                max_rooms: 14,
+                min_rooms: 8
             };
         
-            init_empty_map(&mut map, &'.');
+            init_empty_map(&mut map, &'░');
             map
         }
     
@@ -141,24 +141,6 @@ pub mod map {
         }
     }
     
-    impl Default for Map {
-        fn default() -> Self {
-            let mut map = Map {
-                height: 40,
-                width: 40,
-                r_list: Vec::<Room>::new(),
-                c_map: ArrayVec::<Cord, 1600>::new(),
-                max_room_size: 8,
-                min_room_size: 4,
-                max_rooms: 10,
-                min_rooms: 5
-            };
-        
-            init_empty_map(&mut map, &'.');
-            map
-        }
-    }
-    
     impl std::fmt::Display for Map {
         fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
             for y in 0..self.height {
@@ -195,7 +177,7 @@ use rand::Rng;
 use std::cmp::Ordering;
 
 
-pub fn heuristic(map: &mut Map, textures: &map::TexturePack) {
+pub fn run(map: &mut Map, textures: &map::TexturePack) {
     // Clear old data
     map.clear(&textures.empty);
 
@@ -297,4 +279,8 @@ fn draw_paths(map: &mut Map, textures: &map::TexturePack) {
     }
 }
 
-
+pub fn update_data_list(map: &map::Map, data: &mut Vec<(&str, String)>) {
+    data.clear();
+    data.push(("Number of Rooms", format!("{}", map.num_rooms())));
+    data.push(("Total Room Surface Area", format!("{}", map.room_sa())));
+}
