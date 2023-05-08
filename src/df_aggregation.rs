@@ -1,6 +1,6 @@
 /////////// ------------------------------------------------------///////////
 ///                                                                       ///
-///                             Drunkard!                                 ///
+///                    Diffusion-Limited Aggregation                      ///
 ///                                                                       ///
 /////////// ------------------------------------------------------///////////
 
@@ -12,8 +12,8 @@ pub mod map {
         pub height: usize,
         pub width: usize,
         pub render: ArrayVec<bool, 1600>,
-        pub iterations: i32,
-        pub max_steps: i32
+        pub desired_tiles: i32,
+        pub total_tiles: i32,
     }
 
     impl Map {
@@ -22,8 +22,8 @@ pub mod map {
                 height: 40,
                 width: 40,
                 render: ArrayVec::<bool, 1600>::new(),
-                iterations: 0,
-                max_steps: 50
+                desired_tiles: 500,
+                total_tiles: 0,
             };
         
             fill(&mut map);
@@ -54,7 +54,7 @@ pub mod map {
     }
     
     pub fn fill(map: &mut Map) {
-        map.iterations = 0;
+        map.total_tiles = 0;
         map.render.clear();
 
         for _r in 0..map.height {
@@ -69,62 +69,70 @@ pub mod map {
 use rand::Rng;
 
 
-pub fn iterate(map: &mut map::Map) {
-    let mut rng = rand::thread_rng();
-    const START_RADIUS: usize = 10;
-    let mut x: usize;
-    let mut y: usize;
+pub fn run(map: &mut map::Map) {
+    map::fill(map);
 
-    match map.iterations {
-        0 => {
-            x = rng.gen_range(START_RADIUS..(map.width - START_RADIUS));
-            y = rng.gen_range(START_RADIUS..(map.width - START_RADIUS));
-        },
-        _ => {
+    let mut rng = rand::thread_rng();
+    let mut x: usize = map.width / 2;
+    let mut y: usize = map.height / 2;
+
+    // create seed in center
+    *map.render.get_mut(y * map.width + x + 1).expect("true") = false;
+    *map.render.get_mut((y + 1) * map.width + x + 1).expect("true") = false;
+    *map.render.get_mut(y * map.width + x).expect("true") = false;
+    *map.render.get_mut((y + 1) * map.width + x).expect("true") = false;
+
+    map.total_tiles += 4;
+
+    while map.total_tiles < map.desired_tiles {
+        loop {
             loop {
-                x = rng.gen_range(START_RADIUS..(map.width - START_RADIUS));
-                y = rng.gen_range(START_RADIUS..(map.height - START_RADIUS));
-                if map.render.get(y * map.width + x).expect("found point") == &false {
+                x = rng.gen_range(0..map.width);
+                y = rng.gen_range(0..map.height);
+                if map.render.get(y * map.width + x).expect("found point") == &true {
                     break;
                 }
             }
-        }
-    }
 
-    // continue for MAX_STEPS or exiting bounds
-    for _ in 0..map.max_steps {
+            // store last position
+            let last_pos = (x, y);
 
-        // check bounds
-        if x == 0 || y == 0 || x == map.width - 1 || y == map.height - 1 {
-            break;
-        }
-
-        // choose a direction and take a step
-        match rng.gen_range(0..4) {
-            // Up
-            0 => {
-                y -= 1;
-            },
-            // Down
-            1 => {
-                y += 1;
-            },
-            // Left
-            2 => {
-                x -= 1;
-            },
-            // Right
-            _ => {
-                x += 1;
+            // check bounds
+            if x == 0 || y == 0 || x == map.width - 1 || y == map.height - 1 {
+                break;
             }
-        }
 
-        // remove wall
-        if let Some(elem) = map.render.get_mut(y * map.width + x) {
-            *elem = false;
-        } 
+            // choose a direction and take a step
+            match rng.gen_range(0..4) {
+                // Up
+                0 => {
+                    y -= 1;
+                },
+                // Down
+                1 => {
+                    y += 1;
+                },
+                // Left
+                2 => {
+                    x -= 1;
+                },
+                // Right
+                _ => {
+                    x += 1;
+                }
+            }
+
+            // check for floor
+            if let Some(elem) = map.render.get(y * map.width + x) {
+                // if the drunk hits a floor, the previous tile becomes a floor
+                if elem == &false {
+                    *map.render.get_mut(last_pos.1 * map.width + last_pos.0).expect("true") = false;
+                    map.total_tiles += 1;
+                    break;
+                }
+            } 
+        }
     }
-    map.iterations += 1;
 }
 
 fn num_walls(map: &map::Map) -> i32 {
@@ -141,8 +149,7 @@ fn num_walls(map: &map::Map) -> i32 {
 
 pub fn update_data_list(map: &map::Map, data: &mut Vec<(&str, String)>) {
     data.clear();
-    data.push(("Steps Per Iteration", format!("{}", map.max_steps)));
-    data.push(("Iterations", format!("{}", map.iterations)));
+    data.push(("Desired Number of Floor Tiles", format!("{}", map.desired_tiles)));
     let num_walls = num_walls(&map);
     data.push(("Total Number of Walls", format!("{}", num_walls)));
     data.push(("Total Empty Space", format!("{}", 1600 - num_walls)));
