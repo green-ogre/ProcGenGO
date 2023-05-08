@@ -27,26 +27,6 @@ pub mod map {
             scramble(&mut map);
             map
         }
-    
-        pub fn update_map_rows(&self, map_rows: &mut Vec::<String>) {
-            map_rows.clear();
-            for y in 0..self.height {
-                let mut row = String::new();
-                // fix alignment with rows 0-9
-                if y < 10 {
-                    row.push(' ');
-                }
-    
-                for x in 0..self.width {
-                    row.push(match self.get_pos(x, y) {
-                        true => 'X',
-                        false => '.'
-                    });
-                    row.push(' ');
-                }
-                map_rows.push(row);
-            }
-        }
 
         pub fn get_pos(&self, x: usize, y: usize) -> &bool {
             self.render.get(self.width * y + x).expect("Could not find position")
