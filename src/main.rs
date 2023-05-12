@@ -4,17 +4,15 @@
 ///                                                                       ///
 /////////// ------------------------------------------------------///////////
 
-pub mod heuristic;
-pub mod cellular_automata;
-pub mod drunkard;
-pub mod df_aggregation;
+pub mod map_builders;
 
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use std::{cmp::Ordering, error::Error, io, time::{Duration, Instant}};
+use map_builders::{bsp_dungeon::BSPDungeonBuilder, cellular_automata::CellularAutomataBuilder, df_aggregation::DiffusionLimitedAggregationBuilder, drunkard::DrunkardBuilder, MapBuilder};
+use std::{cmp::Ordering, error::Error, io, time::{Duration}};
 use tui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
@@ -26,133 +24,105 @@ use tui::{
 
 
 enum Algorithm {
-    Heuristic,
+    BSP,
     Cellular,
     Drunkard,
     Aggregation,
 }
-struct Heuristic {
-    // Map instance
-    map: heuristic::map::Map,
-    // ASCII rendered on Map
-    textures: heuristic::map::TexturePack,
-}
 
-impl Heuristic {
-    fn new() -> Self {
-        Heuristic { 
-            map: heuristic::map::Map::new(), 
-            textures: heuristic::map::TexturePack::new()
-        }
-    }
-}
 
-struct Cellular {
-    map: cellular_automata::map::Map
-}
-
-impl Cellular {
-    fn new() -> Self {
-        Cellular { 
-            map: cellular_automata::map::Map::new()
-        }
-    }
-}
-
-struct Drunkard {
-    map: drunkard::map::Map
-}
-
-impl Drunkard {
-    fn new() -> Self {
-        Drunkard { 
-            map: drunkard::map::Map::new()
-        }
-    }
-}
-
-struct Aggregation {
-    map: df_aggregation::map::Map
-}
-
-impl Aggregation {
-    fn new() -> Self {
-        Aggregation { 
-            map: df_aggregation::map::Map::new()
-        }
-    }
-}
-
-struct AlgorithmData {
-    heuristic: Heuristic,
-    cellular: Cellular,
-    drunkard: Drunkard,
-    aggregation: Aggregation,
-}
-
-impl AlgorithmData {
-    fn new() -> Self {
-        AlgorithmData { 
-            heuristic: Heuristic::new(), 
-            cellular: Cellular::new(),
-            drunkard: Drunkard::new(),
-            aggregation: Aggregation::new(),
-        }
-    }
+struct MapBuilders {
+    bsp: BSPDungeonBuilder,
+    cellular: CellularAutomataBuilder,
+    drunkard: DrunkardBuilder,
+    dfa: DiffusionLimitedAggregationBuilder,
 }
 
 
 struct App<'a> {
-    // Generation time in microseconds
-    gen_time: Duration,
-    // Time data for barchart
+    gen_time: u128,
     time_barchart: Vec<(&'a str, u64)>,
-    // Time data for sparkline
     time_sparkline: Vec<u64>,
-    // Generation algorithm
     algorithm: Algorithm,
-    algorithm_data: AlgorithmData,
     tab_titles: Vec<&'a str>,
     tab_index: usize,
-    data_list: Vec<(&'a str, String)>,
+    map_data: Vec<(&'a str, String)>,
+    map_builders: MapBuilders,
 }
+
 
 impl<'a> Default for App<'a> {
     fn default() -> Self {
         App {
-            gen_time: Duration::default(),
+            gen_time: 0,
             time_barchart: Vec::<(&'a str, u64)>::new(),
             time_sparkline: Vec::<u64>::new(),
-            algorithm: Algorithm::Heuristic,
-            algorithm_data: AlgorithmData::new(),
-            tab_titles: vec!["Heuristic", "Cellular", "Drunkard", "Diffusion-Limited Aggregation"],
+            algorithm: Algorithm::BSP,
+            tab_titles: vec!["(1) BSP", "(2) Cellular", "(3) Drunkard", "(4) DFA"],
             tab_index: 0,
-            data_list: Vec::<(&str, String)>::new(),
+            map_data: Vec::<(&str, String)>::new(),
+            map_builders: MapBuilders {
+                bsp: BSPDungeonBuilder::new(),
+                cellular: CellularAutomataBuilder::new(),
+                dfa: DiffusionLimitedAggregationBuilder::new(),
+                drunkard: DrunkardBuilder::new(),
+            }
         }
     }
 }
+
 
 impl<'a> App<'a> {
     fn update_current_algo(&mut self) {
         match self.tab_index {
-            0 => self.algorithm = Algorithm::Heuristic,
+            0 => self.algorithm = Algorithm::BSP,
             1 => self.algorithm = Algorithm::Cellular,
             2 => self.algorithm = Algorithm::Drunkard,
             3 => self.algorithm = Algorithm::Aggregation,
-            _ => self.algorithm = Algorithm::Heuristic,
+            _ => self.algorithm = Algorithm::BSP,
         }
+        rebuild(self);
     }
 
-    fn update_data_list(&mut self) {
-        match self.tab_index {
-            0 => heuristic::update_data_list(&self.algorithm_data.heuristic.map, &mut self.data_list),
-            1 => cellular_automata::update_data_list(&self.algorithm_data.cellular.map, &mut self.data_list),
-            2 => drunkard::update_data_list(&self.algorithm_data.drunkard.map, &mut self.data_list),
-            3 => df_aggregation::update_data_list(&self.algorithm_data.aggregation.map, &mut self.data_list),
-            _ => {}
+    // prevents iteration on unbuilt maps which breaks app
+    fn build_iter_maps(&mut self) {
+        self.map_builders.cellular.build();
+        self.map_builders.dfa.build();
+        self.map_builders.drunkard.build();
+    }
+
+    fn set_gen_time(&mut self, gen_time: Duration) {
+        self.gen_time = gen_time.as_micros();
+    }
+
+    fn update_time_charts(&mut self) {
+        // update sparkline time data
+        match self.time_sparkline.len().cmp(&115) {
+            Ordering::Greater => {
+                self.time_sparkline.remove(0);
+                self.time_sparkline.push(self.gen_time as u64);
+            },
+            _ => { self.time_sparkline.push(self.gen_time as u64); }
+        }
+    
+        // update barchart time data
+        let title: &str = match self.algorithm {
+            Algorithm::Aggregation => "DFA",
+            Algorithm::Cellular => "CELL",
+            Algorithm::Drunkard => "DRU",
+            Algorithm::BSP => "HUE",
+        };
+    
+        match self.time_barchart.len().cmp(&4) {
+            Ordering::Greater => {
+                self.time_barchart.remove(0);
+                self.time_barchart.push((title, self.gen_time as u64));
+            },
+            _ => { self.time_barchart.push((title, self.gen_time as u64)); }
         }
     }
 }
+
 
 fn main() -> Result<(), Box<dyn Error>> {
     // setup terminal
@@ -162,8 +132,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // create app and run it
-    let app = App::default();
+    // create app, initialize map builders, and run
+    let mut app = App::default();
+    app.build_iter_maps();
     let res = run_app(&mut terminal, app);
 
     // restore terminal
@@ -182,23 +153,22 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<()> {
     loop {
+        // draws the current state of the app
         terminal.draw(|f| ui(f, &mut app))?;
 
+        // handles user input
         match event::read()? {
             Event::Key(key) => 
             match key.code {
-                KeyCode::Char('r') => {
-                    update(&mut app);
+                KeyCode::Char('b') => {
+                    rebuild(&mut app);
                 },
 
-                KeyCode::Char('s') => {
-                    match app.algorithm {
-                        Algorithm::Cellular => cellular_automata::map::scramble(&mut app.algorithm_data.cellular.map),
-                        Algorithm::Drunkard => drunkard::map::fill(&mut app.algorithm_data.drunkard.map),
-                        _ => {}
-                    }
+                KeyCode::Char('i') => {
+                    iterate(&mut app)
                 },
 
                 KeyCode::Char('q') => {
@@ -223,7 +193,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                 KeyCode::Char('4') => {
                     app.tab_index = 3;
                     app.update_current_algo();
-                },
+                }
 
                 _ => {}
             },
@@ -232,120 +202,77 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
     }
 }
 
-fn update(app: &mut App) {
+
+fn rebuild(app: &mut App) {
+    let duration = match app.algorithm {
+        Algorithm::BSP => {
+            let builder = &mut app.map_builders.bsp;
+            let duration = map_builders::rebuild(builder);
+            builder.update_map_data(&mut app.map_data);
+            duration
+        },
+        Algorithm::Cellular => {
+            let builder = &mut app.map_builders.cellular;
+            let duration = map_builders::rebuild(builder);
+            builder.update_map_data(&mut app.map_data);
+            duration
+        },
+        Algorithm::Aggregation => {
+            let builder = &mut app.map_builders.dfa;
+            let duration = map_builders::rebuild(builder);
+            builder.update_map_data(&mut app.map_data);
+            duration
+        },
+        Algorithm::Drunkard => {
+            let builder = &mut app.map_builders.drunkard;
+            let duration = map_builders::rebuild(builder);
+            builder.update_map_data(&mut app.map_data);
+            duration
+        },
+    };
+    app.set_gen_time(duration);
+
+    // updates the state of the ui data for the next render
+    app.update_time_charts();
+}
+
+
+fn iterate(app: &mut App) {
     match app.algorithm {
+        Algorithm::Cellular => {
+            let builder = &mut app.map_builders.cellular;
+            let duration = map_builders::iterate(builder);
 
-        Algorithm::Heuristic => {
-            // generate new map and measure time
-            let start = Instant::now();
-            heuristic::run(&mut app.algorithm_data.heuristic.map, &app.algorithm_data.heuristic.textures);
-            let duration = start.elapsed();
-            app.gen_time = duration;
-
-            // update time data
-            match app.time_sparkline.len().cmp(&115) {
-                Ordering::Greater => {
-                    app.time_sparkline.remove(0);
-                    app.time_sparkline.push(duration.as_micros() as u64);
-                },
-                _ => { app.time_sparkline.push(duration.as_micros() as u64); }
-            }
-
-            // update num room data
-            match app.time_barchart.len().cmp(&4) {
-                Ordering::Greater => {
-                    app.time_barchart.remove(0);
-                    app.time_barchart.push(("HU", duration.as_micros() as u64));
-                },
-                _ => { app.time_barchart.push(("HU", duration.as_micros() as u64)); }
+            builder.update_map_data(&mut app.map_data);
+            if duration.as_micros() > 0 {
+                app.set_gen_time(duration);
+                app.update_time_charts();
             }
         },
-
-        Algorithm::Cellular => {
-            // generate new map and measure time
-            let start = Instant::now();
-
-            cellular_automata::iterate(&mut app.algorithm_data.cellular.map);
-
-            let duration = start.elapsed();
-            app.gen_time = duration;
-
-            // update time data
-            match app.time_sparkline.len().cmp(&115) {
-                Ordering::Greater => {
-                    app.time_sparkline.remove(0);
-                    app.time_sparkline.push(duration.as_micros() as u64);
-                },
-                _ => { app.time_sparkline.push(duration.as_micros() as u64); }
-            }
-
-            // update num room data
-            match app.time_barchart.len().cmp(&4) {
-                Ordering::Greater => {
-                    app.time_barchart.remove(0);
-                    app.time_barchart.push(("CA", duration.as_micros() as u64));
-                },
-                _ => { app.time_barchart.push(("CA", duration.as_micros() as u64)); }
-            }
-        }
-
-        Algorithm::Drunkard => {
-            // generate new map and measure time
-            let start = Instant::now();
-
-            drunkard::iterate(&mut app.algorithm_data.drunkard.map);
-
-            let duration = start.elapsed();
-            app.gen_time = duration;
-
-            // update time data
-            match app.time_sparkline.len().cmp(&115) {
-                Ordering::Greater => {
-                    app.time_sparkline.remove(0);
-                    app.time_sparkline.push(duration.as_micros() as u64);
-                },
-                _ => { app.time_sparkline.push(duration.as_micros() as u64); }
-            }
-
-            // update num room data
-            match app.time_barchart.len().cmp(&4) {
-                Ordering::Greater => {
-                    app.time_barchart.remove(0);
-                    app.time_barchart.push(("DK", duration.as_micros() as u64));
-                },
-                _ => { app.time_barchart.push(("DK", duration.as_micros() as u64)); }
-            }
-        }
-
         Algorithm::Aggregation => {
-            // generate new map and measure time
-            let start = Instant::now();
+            let builder = &mut app.map_builders.dfa;
+            let duration = map_builders::iterate(builder);
 
-            df_aggregation::run(&mut app.algorithm_data.aggregation.map);
-
-            let duration = start.elapsed();
-            app.gen_time = duration;
-
-            // update time data
-            match app.time_sparkline.len().cmp(&115) {
-                Ordering::Greater => {
-                    app.time_sparkline.remove(0);
-                    app.time_sparkline.push(duration.as_micros() as u64);
-                },
-                _ => { app.time_sparkline.push(duration.as_micros() as u64); }
+            builder.update_map_data(&mut app.map_data);
+            if duration.as_micros() > 0 {
+                app.set_gen_time(duration);
+                app.update_time_charts();
             }
+        },
+        Algorithm::Drunkard => {
+            let builder = &mut app.map_builders.drunkard;
+            let duration = map_builders::iterate(builder);
 
-            // update num room data
-            match app.time_barchart.len().cmp(&4) {
-                Ordering::Greater => {
-                    app.time_barchart.remove(0);
-                    app.time_barchart.push(("DFA", duration.as_micros() as u64));
-                },
-                _ => { app.time_barchart.push(("DFA", duration.as_micros() as u64)); }
+            builder.update_map_data(&mut app.map_data);
+            if duration.as_micros() > 0 {
+                app.set_gen_time(duration);
+                app.update_time_charts();
             }
-        }
-    }
+        },
+        _ => {}
+    };
 }
+
 
 fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     // define ui layout
@@ -363,7 +290,7 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .margin(2)
         .constraints([
             Constraint::Length(3), 
-            Constraint::Max(45)
+            Constraint::Max(50)
             ].as_ref())
         .split(data_map_chunks[1]);
 
@@ -371,7 +298,6 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(1),
             Constraint::Percentage(10),
             Constraint::Percentage(20),
             Constraint::Percentage(70)
@@ -380,69 +306,40 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
     let data_chunks = Layout::default()
         .direction(Direction::Horizontal)
-        .margin(2)
         .constraints([
             Constraint::Percentage(50), 
             Constraint::Percentage(50)
             ].as_ref())
-        .split(left_chunks[3]);
+        .split(left_chunks[2]);
+
+    let data_notes_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Percentage(50), 
+                Constraint::Percentage(50)
+            ].as_ref())
+            .split(data_chunks[1]);
 
     // create help message
-    let (msg, style) = match app.algorithm {
-        Algorithm::Heuristic => (vec![
+    let (msg, style) = (vec![
             Span::raw("Press "),
             Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(" to exit, "),
-            Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" to generate a new map."),
-            ],
-            Style::default()
-        ),
-        Algorithm::Cellular => (vec![
-            Span::raw("Press "),
-            Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" to exit, "),
-            Span::styled("s", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" to scramble, "),
-            Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled("b", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(" to regenerate the map, "),
+            Span::styled("i", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(" to iterate."),
             ],
             Style::default()
-        ),
-        Algorithm::Drunkard => (vec![
-            Span::raw("Press "),
-            Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" to exit, "),
-            Span::styled("s", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" to reset, "),
-            Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" to iterate."),
-            ],
-            Style::default()
-        ),
-        Algorithm::Aggregation => (vec![
-            Span::raw("Press "),
-            Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" to exit, "),
-            Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" to generate a new map."),
-            ],
-            Style::default()
-        ),
-    };
+        );
 
     // render help message
-    let mut text = Text::from(Spans::from(msg));
-    text.patch_style(style);
-    let help_message = Paragraph::new(text);
-    f.render_widget(help_message, left_chunks[0]);
-
-    // render time
-    let time_text = format!("This generation took {:?}...", app.gen_time);
-    let time_render = Paragraph::new(time_text.as_ref())
+    let mut help_text = Text::from(Spans::from(msg));
+    help_text.patch_style(style);
+    let time_render = Paragraph::new(help_text)
         .style(Style::default().fg(Color::White))
-        .block(Block::default().borders(Borders::ALL).title("Time Report").border_type(BorderType::Rounded));
-    f.render_widget(time_render, left_chunks[1]);
+        .block(Block::default().borders(Borders::ALL).title("Help").border_type(BorderType::Rounded));
+    f.render_widget(time_render, left_chunks[0]);
 
     // render time barchart
     let barchart = BarChart::default()
@@ -454,10 +351,9 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .value_style(Style::default().fg(Color::Black).bg(Color::Yellow));
     f.render_widget(barchart, data_chunks[0]);
 
-    // render data list
-    app.update_data_list();
+    // render map data list
     let map_render: Vec<ListItem> = app
-        .data_list
+        .map_data
         .iter()
         .map(|(i, m)| {
             let content = vec![Spans::from(Span::raw(format!("{}: {}", i, m)))];
@@ -466,14 +362,25 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .collect();
     let messages =
         List::new(map_render).block(Block::default().borders(Borders::ALL).title("Map Data").border_type(BorderType::Rounded));
-    f.render_widget(messages, data_chunks[1]);
+    f.render_widget(messages, data_notes_chunks[0]);
+
+    // render misc notes
+    let notes = Text::from(textwrap::fill(match app.algorithm {
+        Algorithm::BSP => app.map_builders.bsp.notes(),
+        Algorithm::Cellular => app.map_builders.cellular.notes(),
+        Algorithm::Aggregation => app.map_builders.dfa.notes(),
+        Algorithm::Drunkard => app.map_builders.drunkard.notes(),
+    }, 45));
+    let notes_render =
+        Paragraph::new(notes).block(Block::default().borders(Borders::ALL).title("Misc Notes").border_type(BorderType::Rounded));
+    f.render_widget(notes_render, data_notes_chunks[1]);
 
     // render time sparkline
     let sparkline = Sparkline::default()
         .block(Block::default().title("Time Data").borders(Borders::ALL).border_type(BorderType::Rounded))
         .data(&app.time_sparkline)
         .style(Style::default().fg(Color::Yellow));
-    f.render_widget(sparkline, left_chunks[2]);
+    f.render_widget(sparkline, left_chunks[1]);
 
     // render right chunks
     let titles = app
@@ -505,22 +412,12 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     // render map
     let style = Style::default().add_modifier(Modifier::BOLD);
     let inner = {
-        let mut text: Text;
-        match app.tab_index {
-            0 => {
-                text = Text::from(format!("{}", app.algorithm_data.heuristic.map));
-            },
-            1 => {
-                text = Text::from(format!("{}", app.algorithm_data.cellular.map));
-            },
-            2 => {
-                text = Text::from(format!("{}", app.algorithm_data.drunkard.map));
-            },
-            3 => {
-                text = Text::from(format!("{}", app.algorithm_data.aggregation.map));
-            },
-            _ => unreachable!(),
-        };
+        let mut text = Text::from(match app.algorithm {
+            Algorithm::BSP => app.map_builders.bsp.get_map().to_string(),
+            Algorithm::Cellular => app.map_builders.cellular.get_map().to_string(),
+            Algorithm::Aggregation => app.map_builders.dfa.get_map().to_string(),
+            Algorithm::Drunkard => app.map_builders.drunkard.get_map().to_string(),
+        });
         text.patch_style(style);
         Paragraph::new(text)
             .alignment(tui::layout::Alignment::Center)
