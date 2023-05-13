@@ -19,13 +19,11 @@ pub trait MapBuilder<'a> {
 pub fn rebuild<'a, T: MapBuilder<'a>>(builder: &mut T) -> Duration {
     let start = Instant::now();
     builder.build();
-    let duration = start.elapsed();
-    duration
+    start.elapsed()
 }
 
 pub fn iterate<'a, T: MapBuilder<'a>>(builder: &mut T) -> Duration {
     let start = Instant::now();
     builder.iterate();
-    let duration = start.elapsed();
-    duration
+    start.elapsed()
 }

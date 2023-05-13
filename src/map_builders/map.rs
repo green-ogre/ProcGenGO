@@ -1,3 +1,5 @@
+use std::fmt;
+
 #[derive(PartialEq, Copy, Clone)]
 pub enum TileType {
     Wall, Floor
@@ -13,10 +15,12 @@ pub struct Map {
 impl Map {
     /// Generates a map filled with walls
     pub fn new() -> Map {
+        let width = 39;
+        let height = 39;
         Map{
-            tiles : vec![TileType::Wall; 1600],
-            width : 40,
-            height: 40,
+            tiles : vec![TileType::Wall; width * height],
+            width,
+            height
         }
     }
 
@@ -34,8 +38,10 @@ impl Map {
             None => print!("Couldn't find tile {x}, {y}")
         }
     }
+}
 
-    pub fn to_string(&self) -> String {
+impl fmt::Display for Map {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut str = String::new();
         for y in 0..self.height {
             for x in 0..self.width {
@@ -45,8 +51,8 @@ impl Map {
                 };
                 str.push_str(tile);
             }
-            str.push_str("\n");
+            str.push('\n');
         }
-        str
+        write!(f, "{str}")
     }
 }

@@ -52,7 +52,7 @@ impl<'a> MapBuilder<'a> for BSPDungeonBuilder {
 
     fn update_map_data(&self, map_data: &mut Vec<(&'a str, String)>) {
         map_data.clear();
-        map_data.push(("Name", format!("Binary Space Partitioning")));
+        map_data.push(("Name", "Binary Space Partitioning".to_string()));
         map_data.push(("Number of Rooms", format!("{}", self.rooms.len())));
     }
 
@@ -201,5 +201,11 @@ impl BSPDungeonBuilder {
             let idx = self.map.xy_idx(x, y);
             self.map.tiles[idx] = TileType::Floor;
         }
+    }
+}
+
+impl Default for BSPDungeonBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

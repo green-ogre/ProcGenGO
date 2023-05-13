@@ -32,7 +32,7 @@ impl<'a> MapBuilder<'a> for CellularAutomataBuilder {
 
     fn update_map_data(&self, map_data: &mut Vec<(&'a str, String)>) {
         map_data.clear();
-        map_data.push(("Name", format!("Cellular Automata")));
+        map_data.push(("Name", "Cellular Automata".to_string()));
         map_data.push(("Max Iterations", format!("{}", 16)));
         map_data.push(("Iteration", format!("{}", self.iterations)));
     }
@@ -74,7 +74,7 @@ impl CellularAutomataBuilder {
                 if num_neighbors > 4 {
                     new_tiles.push(TileType::Floor);
                 }
-                else if num_neighbors >= 0 && num_neighbors <= 4 {
+                else if (0..=4).contains(&num_neighbors) {
                     new_tiles.push(TileType::Wall);
                 }
             }
@@ -139,5 +139,11 @@ impl CellularAutomataBuilder {
                 0
             }
         }
+    }
+}
+
+impl Default for CellularAutomataBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

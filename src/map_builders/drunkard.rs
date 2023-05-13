@@ -37,13 +37,13 @@ impl<'a> MapBuilder<'a> for DrunkardBuilder {
     fn update_map_data(&self, map_data: &mut Vec<(&'a str, String)>) {
         map_data.clear();
         let num_walls = self.num_walls();
-        map_data.push(("Name", format!("Drunkard's Walk")));
+        map_data.push(("Name", "Drunkard's Walk".to_string()));
         map_data.push(("Max Iterations", format!("{}", 24)));
         map_data.push(("Steps Per Iteration", format!("{}", self.max_steps)));
         map_data.push(("Iteration", format!("{}", self.iterations)));
         map_data.push(("Total Number of Walls", format!("{}", num_walls)));
         map_data.push(("Total Empty Space", format!("{}", 1600 - num_walls)));
-        map_data.push(("% Occupied", format!("{}", num_walls as f32 / 1600 as f32)));
+        map_data.push(("% Occupied", format!("{}", num_walls as f32 / 1600_f32)));
     }
 
     fn notes(&self) -> &str {
@@ -133,5 +133,11 @@ impl DrunkardBuilder {
             }
         }
         num_walls
+    }
+}
+
+impl Default for DrunkardBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

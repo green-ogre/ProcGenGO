@@ -37,16 +37,16 @@ impl<'a> MapBuilder<'a> for DiffusionLimitedAggregationBuilder {
     fn update_map_data(&self, map_data: &mut Vec<(&'a str, String)>) {
         map_data.clear();
         let num_walls = self.num_walls();
-        map_data.push(("Name", format!("Diffusion-Limited Aggregation")));
+        map_data.push(("Name", "Diffusion-Limited Aggregation".to_string()));
         map_data.push(("Max Iterations", format!("{}", 16)));
         map_data.push(("Iteration", format!("{}", self.iterations)));
         map_data.push(("Total Number of Walls", format!("{}", num_walls)));
         map_data.push(("Total Empty Space", format!("{}", 1600 - num_walls)));
-        map_data.push(("% Occupied", format!("{}", num_walls as f32 / 1600 as f32)));
+        map_data.push(("% Occupied", format!("{}", num_walls as f32 / 1600_f32)));
     }
 
     fn notes(&self) -> &str {
-        "The intense generation time is mostly spent finding a suitable point on the bounding edge of the map, not its unique aggregation. This specific application is more so focused on 'beauty' rather than 'performance'."
+        ""
     }
 }
 
@@ -87,15 +87,36 @@ impl DiffusionLimitedAggregationBuilder {
         while total_tiles < desired_tiles {
             // generates a random point on the edge of the map
             loop {
-                x = rng.gen_range(0..self.map.width);
-                y = rng.gen_range(0..self.map.height);
-                if (self.map.get(x, y) == Some(&TileType::Wall)) && (x == 1 || y == 1 || x == self.map.width - 2 || y == self.map.height - 2) {
+                match rng.gen_range(0..4) {
+                    // Up
+                    0 => { 
+                        x = 1;
+                        y = rng.gen_range(1..(self.map.height-2));
+                    },
+                    // Down
+                    1 => { 
+                        x = self.map.width - 2;
+                        y = rng.gen_range(1..(self.map.height-2));
+                    },
+                    // Left
+                    2 => {
+                        y = 1;
+                        x = rng.gen_range(1..(self.map.width-2));
+                    },
+                    // Right
+                    _ => { 
+                        y = self.map.height - 2;
+                        x = rng.gen_range(1..(self.map.width-2));
+                    }
+                }
+
+                if self.map.get(x, y) == Some(&TileType::Wall){
                     break;
                 }
             }
 
             loop {
-                // check bounds (Doesn't seem to catch the bottom edge?)
+                // check bounds
                 if x == 0 || y == 0 || x == self.map.width - 1 || y == self.map.height - 1 {
                     break;
                 }
@@ -140,5 +161,11 @@ impl DiffusionLimitedAggregationBuilder {
             }
         }
         num_walls
+    }
+}
+
+impl Default for DiffusionLimitedAggregationBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }

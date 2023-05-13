@@ -97,13 +97,11 @@ impl<'a> App<'a> {
 
     fn update_time_charts(&mut self) {
         // update sparkline time data
-        match self.time_sparkline.len().cmp(&115) {
-            Ordering::Greater => {
-                self.time_sparkline.remove(0);
-                self.time_sparkline.push(self.gen_time as u64);
-            },
-            _ => { self.time_sparkline.push(self.gen_time as u64); }
+        match self.time_sparkline.len().cmp(&150) {
+            Ordering::Greater => { self.time_sparkline.pop(); },
+            _ => {}
         }
+        self.time_sparkline.insert(0, self.gen_time as u64);
     
         // update barchart time data
         let title: &str = match self.algorithm {
@@ -113,13 +111,11 @@ impl<'a> App<'a> {
             Algorithm::BSP => "HUE",
         };
     
-        match self.time_barchart.len().cmp(&4) {
-            Ordering::Greater => {
-                self.time_barchart.remove(0);
-                self.time_barchart.push((title, self.gen_time as u64));
-            },
-            _ => { self.time_barchart.push((title, self.gen_time as u64)); }
+        match self.time_barchart.len().cmp(&10) {
+            Ordering::Greater => { self.time_barchart.pop(); },
+            _ => {}
         }
+        self.time_barchart.insert(0, (title, self.gen_time as u64));
     }
 }
 
@@ -160,15 +156,14 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
         terminal.draw(|f| ui(f, &mut app))?;
 
         // handles user input
-        match event::read()? {
-            Event::Key(key) => 
+        if let Event::Key(key) = event::read()? {
             match key.code {
                 KeyCode::Char('b') => {
                     rebuild(&mut app);
                 },
 
                 KeyCode::Char('i') => {
-                    iterate(&mut app)
+                    iterate(&mut app);
                 },
 
                 KeyCode::Char('q') => {
@@ -196,8 +191,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, mut app: App) -> io::Result<(
                 }
 
                 _ => {}
-            },
-            _ => {}
+            }
         }
     }
 }
@@ -307,8 +301,8 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let data_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Percentage(50), 
-            Constraint::Percentage(50)
+            Constraint::Percentage(40), 
+            Constraint::Percentage(60)
             ].as_ref())
         .split(left_chunks[2]);
 
@@ -413,10 +407,10 @@ fn ui<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     let style = Style::default().add_modifier(Modifier::BOLD);
     let inner = {
         let mut text = Text::from(match app.algorithm {
-            Algorithm::BSP => app.map_builders.bsp.get_map().to_string(),
-            Algorithm::Cellular => app.map_builders.cellular.get_map().to_string(),
-            Algorithm::Aggregation => app.map_builders.dfa.get_map().to_string(),
-            Algorithm::Drunkard => app.map_builders.drunkard.get_map().to_string(),
+            Algorithm::BSP => format!("{}", app.map_builders.bsp.get_map()),
+            Algorithm::Cellular => format!("{}", app.map_builders.cellular.get_map()),
+            Algorithm::Aggregation => format!("{}", app.map_builders.dfa.get_map()),
+            Algorithm::Drunkard => format!("{}", app.map_builders.drunkard.get_map()),
         });
         text.patch_style(style);
         Paragraph::new(text)
